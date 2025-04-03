@@ -3,7 +3,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.PrintWriter;
@@ -89,12 +88,15 @@ public class ChatServer {
 
     // Méthode pour diffuser un message à tous les clients
     private static void broadcast(String message) {
+        logMessage("Diffusion du message : " + message); // Ajout d'un log
         synchronized (clientWriters) {
             for (PrintWriter writer : clientWriters.values()) {
                 writer.println(message);
+                writer.flush(); // Forcer l'envoi immédiat du message
             }
         }
     }
+    
 
     private static void logMessage(String message) {
         SwingUtilities.invokeLater(() -> {
@@ -141,7 +143,9 @@ public class ChatServer {
                 "babylone_man",
                 "jah"
             );
+            logMessage("Connexion réussie à la base de données !");
         } catch (Exception e) {
+            logMessage("Erreur de connexion à la base de données : " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -180,8 +184,8 @@ public class ChatServer {
 
     private static class ClientHandler extends Thread {
         private Socket socket;
+        private ObjectInputStream input;
         private PrintWriter out;
-        private BufferedReader in;
         private String username;
 
         public ClientHandler(Socket socket) {
@@ -190,29 +194,46 @@ public class ChatServer {
 
         public void run() {
             try {
-                // Attente de l'authentification
-                ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
-                ChatMessage loginMessage = (ChatMessage) ois.readObject();
-                
-                if (loginMessage.getType().equals("LOGIN")) {
+                input = new ObjectInputStream(socket.getInputStream());
+                out = new PrintWriter(socket.getOutputStream(), true);
+    
+                ChatMessage loginMessage = (ChatMessage) input.readObject();
+    
+                if ("LOGIN".equals(loginMessage.getType())) {
                     if (authenticateUser(loginMessage.getUsername(), loginMessage.getContent())) {
                         this.username = loginMessage.getUsername();
-                        // Suite du traitement...
+                        connectedClients.add(username);
+                        clientWriters.put(username, out);
+                        updateClientList();
+    
+                        out.println("LOGIN_SUCCESS"); // Envoi d'un message au client
+                        logMessage(username + " s'est connecté avec succès.");
                     } else {
-                        // Échec de l'authentification
+                        out.println("LOGIN_FAILED"); // Message en cas d'échec
                         socket.close();
                         return;
                     }
                 }
-
-                // Traitement des messages
-                String message;
-                while ((message = in.readLine()) != null) {
-                    saveMessage(username, message);
-                    broadcast(username + ": " + message);
+    
+                while (true) {
+                    Object obj = input.readObject();
+                    if (obj instanceof ChatMessage) {
+                        ChatMessage chatMessage = (ChatMessage) obj;  // Cast correct
+                        String message = chatMessage.getContent();    // Récupération du contenu du message
+                        
+                        saveMessage(username, message);
+                        broadcast(username + ": " + message);
+                    }
                 }
+                
             } catch (Exception e) {
-                e.printStackTrace();
+                logMessage("Erreur avec le client : " + e.getMessage());
+            } finally {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    logMessage("Erreur de fermeture de socket : " + e.getMessage());
+                }
             }
         }
     }

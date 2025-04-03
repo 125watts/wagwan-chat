@@ -19,5 +19,9 @@ public class ChatMessage implements Serializable {
     public String getUsername() { return username; }
     public String getContent() { return content; }
 
+    @Override
+    public String toString() {
+        return "Type: " + type + ", User: " + username + ", Message: " + content;
+    }
     
 } 

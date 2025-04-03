@@ -65,7 +65,10 @@ public class ChatClient {
             socket = new Socket("127.0.0.1", 3308); // Change l'adresse et le port si nécessaire
             objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
+    
+            // **Ajoute cette ligne pour initialiser `out`**
+            out = new PrintWriter(socket.getOutputStream(), true);
+    
             // Création et envoi du message de login
             ChatMessage loginMessage = new ChatMessage("LOGIN", username, password);
             objectOutputStream.writeObject(loginMessage);
@@ -104,8 +107,15 @@ public class ChatClient {
 
         textField.addActionListener(e -> {
             String message = textField.getText();
+
             if (!message.trim().isEmpty()) {
-                out.println(message);
+                try {
+                    ChatMessage chatMessage = new ChatMessage("MESSAGE", username, message);
+                    objectOutputStream.writeObject(chatMessage);
+                    objectOutputStream.flush();
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
                 textField.setText("");
             }
         });
@@ -113,5 +123,17 @@ public class ChatClient {
         frame.setSize(400, 300);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setVisible(true);
+
+        new Thread(() -> {
+            try {
+                String message;
+                while ((message = in.readLine()) != null) {
+                    handleMessage(message); // Affiche le message reçu dans le chat
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }).start();
+        
     }
 }
